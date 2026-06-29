@@ -7,41 +7,61 @@ from sklearn.model_selection import train_test_split
 
 st.title("🩺 Simulasi Prediksi Stroke")
 
-# Membaca dataset
+# ==========================
+# LOAD DATASET
+# ==========================
 df = pd.read_csv("healthcare-dataset-stroke-data.csv")
 
-# Hapus kolom id
-df = df.drop(columns=['id'])
+# Hapus ID
+df = df.drop(columns=["id"])
 
-# Isi BMI kosong
-df['bmi'] = df['bmi'].fillna(df['bmi'].mean())
+# Isi missing BMI
+df["bmi"] = df["bmi"].fillna(df["bmi"].median())
 
-# Encoding
+# One Hot Encoding
 df_encoded = pd.get_dummies(
     df,
+    columns=[
+        "gender",
+        "ever_married",
+        "work_type",
+        "Residence_type",
+        "smoking_status"
+    ],
     drop_first=True
 )
 
-# Pisahkan fitur dan target
-X = df_encoded.drop(columns=['stroke'])
-y = df_encoded['stroke']
+X = df_encoded.drop(columns=["stroke"])
+y = df_encoded["stroke"]
 
 # Split data
 X_train, X_test, y_train, y_test = train_test_split(
     X,
     y,
     test_size=0.2,
+    stratify=y,
     random_state=42
 )
 
-# Train model
-model_viz = DecisionTreeClassifier(
-    class_weight='balanced',
+# Model Decision Tree
+model = DecisionTreeClassifier(
+    class_weight="balanced",
     max_depth=5,
     random_state=42
 )
 
-model_viz.fit(X_train, y_train)
+model.fit(X_train, y_train)
+
+# ==========================
+# INPUT USER
+# ==========================
+
+st.subheader("Masukkan Data Pasien")
+
+gender = st.selectbox(
+    "Gender",
+    ["Male", "Female", "Other"]
+)
 
 umur = st.slider(
     "Umur",
@@ -55,9 +75,33 @@ hipertensi = st.selectbox(
     ["Tidak", "Ya"]
 )
 
-penyakit_jantung = st.selectbox(
+jantung = st.selectbox(
     "Penyakit Jantung",
     ["Tidak", "Ya"]
+)
+
+menikah = st.selectbox(
+    "Pernah Menikah",
+    ["No", "Yes"]
+)
+
+work = st.selectbox(
+    "Jenis Pekerjaan",
+    [
+        "Private",
+        "Self-employed",
+        "Govt_job",
+        "children",
+        "Never_worked"
+    ]
+)
+
+residence = st.selectbox(
+    "Tempat Tinggal",
+    [
+        "Urban",
+        "Rural"
+    ]
 )
 
 glukosa = st.number_input(
@@ -72,59 +116,74 @@ bmi = st.number_input(
     value=25.0
 )
 
-prediksi_btn = st.button(
-    "Prediksi"
+smoking = st.selectbox(
+    "Status Merokok",
+    [
+        "never smoked",
+        "formerly smoked",
+        "smokes",
+        "Unknown"
+    ]
 )
 
-if prediksi_btn:
+# ==========================
+# PREDIKSI
+# ==========================
+
+if st.button("Prediksi"):
 
     data_baru = pd.DataFrame(
         np.zeros((1, len(X.columns))),
         columns=X.columns
     )
 
-    data_baru['age'] = umur
+    # Fitur numerik
+    data_baru["age"] = umur
+    data_baru["hypertension"] = 1 if hipertensi == "Ya" else 0
+    data_baru["heart_disease"] = 1 if jantung == "Ya" else 0
+    data_baru["avg_glucose_level"] = glukosa
+    data_baru["bmi"] = bmi
 
-    data_baru['hypertension'] = (
-        1 if hipertensi == "Ya"
-        else 0
-    )
+    # Gender
+    if "gender_Male" in X.columns and gender == "Male":
+        data_baru["gender_Male"] = 1
 
-    data_baru['heart_disease'] = (
-        1 if penyakit_jantung == "Ya"
-        else 0
-    )
+    if "gender_Other" in X.columns and gender == "Other":
+        data_baru["gender_Other"] = 1
 
-    data_baru['avg_glucose_level'] = glukosa
+    # Ever Married
+    if "ever_married_Yes" in X.columns and menikah == "Yes":
+        data_baru["ever_married_Yes"] = 1
 
-    data_baru['bmi'] = bmi
+    # Work Type
+    if f"work_type_{work}" in X.columns:
+        data_baru[f"work_type_{work}"] = 1
 
-    hasil = model_viz.predict(data_baru)
+    # Residence
+    if "Residence_type_Urban" in X.columns and residence == "Urban":
+        data_baru["Residence_type_Urban"] = 1
 
-    prob = model_viz.predict_proba(
-        data_baru
-    )
+    # Smoking
+    if smoking != "Unknown":
+        kolom = f"smoking_status_{smoking}"
+        if kolom in X.columns:
+            data_baru[kolom] = 1
 
-    st.subheader(
-        "Probabilitas Prediksi"
+    # Prediksi
+    hasil = model.predict(data_baru)
+    probabilitas = model.predict_proba(data_baru)
+
+    st.subheader("📊 Hasil Prediksi")
+
+    st.write(
+        f"**Probabilitas Tidak Stroke :** {probabilitas[0][0]*100:.2f}%"
     )
 
     st.write(
-        f"Tidak Stroke : {prob[0][0]*100:.2f}%"
-    )
-
-    st.write(
-        f"Stroke : {prob[0][1]*100:.2f}%"
+        f"**Probabilitas Stroke :** {probabilitas[0][1]*100:.2f}%"
     )
 
     if hasil[0] == 1:
-
-        st.error(
-            "🔴 Hasil Prediksi : Berisiko Stroke"
-        )
-
+        st.error("🔴 Pasien diprediksi berisiko Stroke")
     else:
-
-        st.success(
-            "🟢 Hasil Prediksi : Tidak Berisiko Stroke"
-        )
+        st.success("🟢 Pasien diprediksi Tidak Berisiko Stroke")
